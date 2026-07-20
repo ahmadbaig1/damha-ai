@@ -1,8 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { SmoochMessage } from '../../zendesk/client'
-import { REPLY_SYSTEM, buildReplyUserPrompt, buildGreetingPrompt, COMPOSE_SYSTEM, buildComposePrompt } from '../../prompts/reply'
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+import { buildReplySystem, buildReplyUserPrompt, buildGreetingPrompt, buildComposeSystem, buildComposePrompt } from '../../prompts/reply'
+import { getOrgToneConfig } from '../../db/orgSettings'
+import { stripPII } from '../../utils/pii'
+import { getAnthropicClient } from '../../utils/anthropic'
 
 const MAX_MESSAGES = 6
 
@@ -29,15 +29,17 @@ export async function composeMessage(
   input: string,
   messages: SmoochMessage[],
 ): Promise<ComposeResult> {
+  const tone = await getOrgToneConfig()
   const transcript = toTranscript(messages)
-  const transcriptString = transcript
-    .map((m) => `${m.role === 'customer' ? 'Customer' : 'Agent'}: ${m.text}`)
-    .join('\n')
+  const transcriptString = stripPII(
+    transcript.map((m) => `${m.role === 'customer' ? 'Customer' : 'Agent'}: ${m.text}`).join('\n'),
+  )
 
+  const client = await getAnthropicClient()
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 500,
-    system: COMPOSE_SYSTEM,
+    system: buildComposeSystem(tone),
     messages: [{ role: 'user', content: buildComposePrompt(input, transcriptString) }],
   })
 
@@ -52,22 +54,24 @@ export async function generateReplyDraft(
   investigationReport?: unknown,
   isGreeting?: boolean,
 ): Promise<string> {
+  const tone = await getOrgToneConfig()
   const transcript = toTranscript(messages)
 
   if (transcript.length === 0) throw new Error('No readable messages to draft from')
 
-  const transcriptString = transcript
-    .map((m) => `${m.role === 'customer' ? 'Customer' : 'Agent'}: ${m.text}`)
-    .join('\n')
+  const transcriptString = stripPII(
+    transcript.map((m) => `${m.role === 'customer' ? 'Customer' : 'Agent'}: ${m.text}`).join('\n'),
+  )
 
   const userPrompt = isGreeting
     ? buildGreetingPrompt(transcriptString)
     : buildReplyUserPrompt(transcript, investigationReport)
 
+  const client = await getAnthropicClient()
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: isGreeting ? 120 : 400,
-    system: REPLY_SYSTEM,
+    system: buildReplySystem(tone),
     messages: [{ role: 'user', content: userPrompt }],
   })
 

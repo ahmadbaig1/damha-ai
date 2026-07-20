@@ -1,8 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { SmoochMessage } from '../../zendesk/client'
 import { COACH_SYSTEM, buildCoachPrompt } from '../../prompts/coach'
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+import { stripPII } from '../../utils/pii'
+import { getAnthropicClient } from '../../utils/anthropic'
 
 const MAX_MESSAGES = 4
 
@@ -31,12 +30,15 @@ export async function getCoachSuggestion(messages: SmoochMessage[]): Promise<Coa
 
   if (transcript.length < 2) return { suggestion: null, type: null }
 
+  const sanitized = transcript.map((m) => ({ ...m, text: stripPII(m.text) }))
+
   try {
+    const client = await getAnthropicClient()
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 120,
       system: COACH_SYSTEM,
-      messages: [{ role: 'user', content: buildCoachPrompt(transcript) }],
+      messages: [{ role: 'user', content: buildCoachPrompt(sanitized) }],
     })
 
     const block = response.content[0]

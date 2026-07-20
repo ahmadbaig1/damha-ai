@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { useInvestigatorStore, Finding } from '../store/investigatorStore'
+import { KBSuggestModal } from './KBSuggestModal'
+import { RaiseIssueModal } from './RaiseIssueModal'
 
 const STATUS_COLOR: Record<Finding['status'], string> = {
   pass: 'var(--color-success)',
@@ -20,141 +23,211 @@ const CONFIDENCE_COLOR: Record<string, string> = {
   low: 'var(--color-text-secondary)',
 }
 
+const SOURCE_COLOR: Record<string, string> = {
+  article: 'var(--color-accent)',
+  url: 'var(--color-warning)',
+  file: 'var(--color-success)',
+  email: '#a78bfa',
+}
+
 interface Props {
   ticketId: number
 }
 
 export function InvestigatorPanel({ ticketId }: Props) {
-  const { reports, loading, errors } = useInvestigatorStore()
+  const { reports, investigationIds, loading, errors, challenge, challenging } = useInvestigatorStore()
+  const [showKBModal, setShowKBModal] = useState(false)
+  const [showRaiseModal, setShowRaiseModal] = useState(false)
+  const [challengeText, setChallengeText] = useState('')
+  const [showChallenge, setShowChallenge] = useState(false)
 
   const isLoading = loading[ticketId]
+  const isChallenging = challenging[ticketId]
   const error = errors[ticketId]
   const report = reports[ticketId]
+  const investigationId = investigationIds[ticketId]
 
   if (!isLoading && !error && !report) return null
 
+  async function handleChallenge() {
+    if (!challengeText.trim()) return
+    await challenge(ticketId, challengeText)
+    setChallengeText('')
+    setShowChallenge(false)
+  }
+
   return (
-    <div style={cardStyle}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: isLoading || error ? 0 : 'var(--space-2)',
-      }}>
-        <span style={labelStyle}>Investigation</span>
+    <>
+      <div style={cardStyle}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: isLoading || error ? 0 : 'var(--space-2)',
+        }}>
+          <span style={labelStyle}>Investigation</span>
+          {report && (
+            <span style={{
+              fontSize: 'var(--text-xs)',
+              color: CONFIDENCE_COLOR[report.confidence],
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+            }}>
+              {report.confidence}
+            </span>
+          )}
+        </div>
+
+        {isLoading && (
+          <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
+            checking site · fetching plugins…
+          </p>
+        )}
+
+        {error && (
+          <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-danger)' }}>{error}</p>
+        )}
+
         {report && (
-          <span style={{
-            fontSize: 'var(--text-xs)',
-            color: CONFIDENCE_COLOR[report.confidence],
-            fontFamily: 'var(--font-mono)',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-          }}>
-            {report.confidence}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            {/* Confirmed bug banner */}
+            {report.issueSeverity === 'confirmed-bug' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: 'var(--space-2)', background: 'rgba(239,68,68,0.1)',
+                border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-md)',
+              }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                  CONFIRMED BUG
+                </span>
+                <button onClick={() => setShowRaiseModal(true)} style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 'var(--radius-sm)', color: 'var(--color-danger)', fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono)', padding: '3px 8px', cursor: 'pointer' }}>
+                  Raise Issue
+                </button>
+              </div>
+            )}
+
+            <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-primary)', lineHeight: 1.55 }}>
+              {report.summary}
+            </p>
+
+            {report.findings.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {report.findings.map((f, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: STATUS_COLOR[f.status], fontFamily: 'var(--font-mono)', flexShrink: 0, width: 10, textAlign: 'center', paddingTop: 1 }}>
+                      {STATUS_SYMBOL[f.status]}
+                    </span>
+                    <div style={{ minWidth: 0 }}>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>{f.area}</span>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-primary)', marginLeft: 4 }}>{f.message}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ borderLeft: '2px solid var(--color-accent)', background: 'var(--color-accent-subtle)', borderRadius: '0 var(--radius-sm) var(--radius-sm) 0', padding: 'var(--space-2)' }}>
+              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-accent)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>Hypothesis</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-primary)', lineHeight: 1.5 }}>{report.hypothesis}</div>
+            </div>
+
+            {report.recommended_steps.length > 0 && (
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Next Steps</div>
+                <ol style={{ margin: 0, paddingLeft: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {report.recommended_steps.map((step, i) => (
+                    <li key={i} style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-primary)', lineHeight: 1.5 }}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {/* KB Citations */}
+            {report.citations && report.citations.length > 0 && (
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  KB Sources Used
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {report.citations.map((c) => (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 'var(--radius-md)' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-mono)', color: SOURCE_COLOR[c.source_type] ?? 'var(--color-text-secondary)', background: `${SOURCE_COLOR[c.source_type] ?? 'rgba(255,255,255,0.1)'}22`, border: `1px solid ${SOURCE_COLOR[c.source_type] ?? 'rgba(255,255,255,0.1)'}44`, borderRadius: 100, padding: '1px 6px', flexShrink: 0, textTransform: 'uppercase' }}>
+                        {c.source_type}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.source_ref
+                            ? <a href={c.source_ref} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)', textDecoration: 'none' }}>{c.title}</a>
+                            : c.title}
+                        </div>
+                        {c.snippet && (
+                          <div style={{ fontSize: 10, color: 'var(--color-text-secondary)', lineHeight: 1.4, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                            {c.snippet}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Challenge / Contest */}
+            {!showChallenge ? (
+              <button
+                onClick={() => setShowChallenge(true)}
+                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '5px', cursor: 'pointer', textAlign: 'center' }}
+              >
+                ↩ Challenge this assessment
+              </button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                <textarea
+                  value={challengeText}
+                  onChange={(e) => setChallengeText(e.target.value)}
+                  placeholder="Explain what you think is wrong or provide additional context…"
+                  rows={3}
+                  style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', padding: 'var(--space-2)', outline: 'none', resize: 'vertical', lineHeight: 1.5, fontFamily: 'var(--font-sans)', width: '100%', boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                  <button
+                    onClick={handleChallenge}
+                    disabled={isChallenging || !challengeText.trim()}
+                    style={{ flex: 1, background: 'var(--color-accent)', border: 'none', borderRadius: 'var(--radius-md)', color: '#fff', fontSize: 'var(--text-xs)', fontWeight: 600, padding: '7px', cursor: isChallenging ? 'wait' : 'pointer', opacity: isChallenging ? 0.7 : 1 }}
+                  >
+                    {isChallenging ? 'Re-evaluating…' : 'Submit Challenge'}
+                  </button>
+                  <button onClick={() => { setShowChallenge(false); setChallengeText('') }} style={{ background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', padding: '7px 12px', cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(report.confidence === 'high' || report.confidence === 'medium') && (
+              <button onClick={() => setShowKBModal(true)} style={{ background: 'transparent', border: '1px solid rgba(129,140,248,0.3)', borderRadius: 'var(--radius-md)', color: 'var(--color-accent)', fontSize: 'var(--text-xs)', fontWeight: 600, fontFamily: 'var(--font-mono)', padding: '6px', cursor: 'pointer', textAlign: 'center' }}>
+                ✦ Suggest KB Article
+              </button>
+            )}
+          </div>
         )}
       </div>
 
-      {isLoading && (
-        <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
-          checking site · fetching plugins…
-        </p>
-      )}
-
-      {error && (
-        <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-danger)' }}>{error}</p>
-      )}
-
-      {report && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {/* Summary */}
-          <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-primary)', lineHeight: 1.55 }}>
-            {report.summary}
-          </p>
-
-          {/* Findings */}
-          {report.findings.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {report.findings.map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                  <span style={{
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 700,
-                    color: STATUS_COLOR[f.status],
-                    fontFamily: 'var(--font-mono)',
-                    flexShrink: 0,
-                    width: 10,
-                    textAlign: 'center',
-                    paddingTop: 1,
-                  }}>
-                    {STATUS_SYMBOL[f.status]}
-                  </span>
-                  <div style={{ minWidth: 0 }}>
-                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                      {f.area}
-                    </span>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-primary)', marginLeft: 4 }}>
-                      {f.message}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Hypothesis */}
-          <div style={{
-            borderLeft: '2px solid var(--color-accent)',
-            background: 'var(--color-accent-subtle)',
-            borderRadius: '0 var(--radius-sm) var(--radius-sm) 0',
-            padding: 'var(--space-2)',
-          }}>
-            <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-accent)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>
-              Hypothesis
-            </div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
-              {report.hypothesis}
-            </div>
-          </div>
-
-          {/* Recommended steps */}
-          {report.recommended_steps.length > 0 && (
-            <div>
-              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Next Steps
-              </div>
-              <ol style={{ margin: 0, paddingLeft: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {report.recommended_steps.map((step, i) => (
-                  <li key={i} style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
-                    {step}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+      {showKBModal && report && <KBSuggestModal report={report} onClose={() => setShowKBModal(false)} />}
+      {showRaiseModal && report && <RaiseIssueModal report={report} investigationId={investigationId} onClose={() => setShowRaiseModal(false)} />}
+    </>
   )
 }
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--glass-bg-heavy)',
-  border: '1px solid var(--glass-border)',
-  borderRadius: 'var(--radius-lg)',
-  padding: 'var(--space-3)',
-  boxShadow: 'var(--shadow-glass)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 'var(--space-2)',
+  background: 'var(--glass-bg-heavy)', border: '1px solid var(--glass-border)',
+  borderRadius: 'var(--radius-lg)', padding: 'var(--space-3)',
+  boxShadow: 'var(--shadow-glass)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)',
 }
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 'var(--text-xs)',
-  fontWeight: 700,
-  color: 'var(--color-text-secondary)',
-  fontFamily: 'var(--font-mono)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
+  fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)',
+  fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
 }

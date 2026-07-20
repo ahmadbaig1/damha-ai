@@ -6,6 +6,13 @@ import {
   fetchMessages,
 } from '../api/tickets'
 
+const HIDDEN_KEY = 'auxly_hidden_tickets'
+function loadHidden(): number[] {
+  try { return JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? '[]') } catch { return [] }
+}
+
+export const COMPLETED_STATUSES = ['solved', 'closed']
+
 interface TicketStore {
   tickets: ChatTicket[]
   activeTicketId: number | null
@@ -13,12 +20,15 @@ interface TicketStore {
   ticketsLoading: boolean
   messagesLoading: boolean
   pendingDrafts: Record<number, string>
+  hiddenIds: number[]
 
   loadTickets: () => Promise<void>
   selectTicket: (id: number) => Promise<void>
   refreshMessages: (id: number) => Promise<void>
   setPendingDraft: (ticketId: number, draft: string) => void
   clearPendingDraft: (ticketId: number) => void
+  hideTicket: (id: number) => void
+  clearTickets: () => void
 }
 
 export const useTicketStore = create<TicketStore>((set, get) => ({
@@ -28,6 +38,7 @@ export const useTicketStore = create<TicketStore>((set, get) => ({
   ticketsLoading: false,
   messagesLoading: false,
   pendingDrafts: {},
+  hiddenIds: loadHidden(),
 
   setPendingDraft: (ticketId, draft) =>
     set((s) => ({ pendingDrafts: { ...s.pendingDrafts, [ticketId]: draft } })),
@@ -38,6 +49,16 @@ export const useTicketStore = create<TicketStore>((set, get) => ({
       delete pendingDrafts[ticketId]
       return { pendingDrafts }
     }),
+
+  hideTicket: (id) =>
+    set((s) => {
+      const hiddenIds = [...s.hiddenIds, id]
+      localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenIds))
+      return { hiddenIds }
+    }),
+
+  clearTickets: () =>
+    set({ tickets: [], conversations: {}, activeTicketId: null }),
 
   loadTickets: async () => {
     set({ ticketsLoading: true })

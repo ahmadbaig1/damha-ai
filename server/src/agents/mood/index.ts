@@ -1,8 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { SmoochMessage } from '../../zendesk/client'
 import { MOOD_SYSTEM, buildMoodPrompt } from '../../prompts/mood'
+import { stripPII } from '../../utils/pii'
+import { getAnthropicClient } from '../../utils/anthropic'
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const MAX_MESSAGES = 8
 
 export interface MoodResult {
@@ -28,10 +28,11 @@ function stripFences(raw: string): string {
 }
 
 export async function assessMood(messages: SmoochMessage[]): Promise<MoodResult> {
-  const transcript = toTranscript(messages)
+  const transcript = stripPII(toTranscript(messages))
   if (!transcript) return { score: 50, label: 'neutral' }
 
   try {
+    const client = await getAnthropicClient()
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 60,

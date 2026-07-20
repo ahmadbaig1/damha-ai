@@ -1,5 +1,6 @@
 import { MoodWidget } from './MoodWidget'
 import { InvestigatorPanel } from './InvestigatorPanel'
+import { InvestigationHistory } from './InvestigationHistory'
 
 interface Props {
   ticketId: number
@@ -19,9 +20,10 @@ export function RightSidebar({ ticketId }: Props) {
       backdropFilter: 'var(--glass-blur)',
       WebkitBackdropFilter: 'var(--glass-blur)',
       overflowY: 'auto',
-      boxShadow: '-4px 0 24px rgba(0,0,0,0.04)',
+      boxShadow: '-4px 0 32px rgba(0,0,0,0.5)',
     }}>
       <MoodWidget ticketId={ticketId} />
+      <InvestigationHistory ticketId={ticketId} />
       <InvestigatorPanel ticketId={ticketId} />
     </div>
   )

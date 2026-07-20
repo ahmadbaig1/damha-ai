@@ -1,10 +1,38 @@
 import { create } from 'zustand'
-import { requestInvestigation } from '../api/investigate'
+import { requestInvestigation, challengeInvestigation } from '../api/investigate'
+import { useAIMessagesStore } from './aiMessagesStore'
+
+const CONFIDENCE_LABEL: Record<string, string> = { low: '🟡 Low', medium: '🟠 Medium', high: '🔴 High' }
+const STATUS_ICON: Record<string, string> = { pass: '✓', warning: '⚠', fail: '✗', unknown: '?' }
+
+function buildSummaryText(report: InvestigationReport): string {
+  const topFindings = report.findings
+    .filter((f) => f.status !== 'pass')
+    .slice(0, 3)
+    .map((f) => `${STATUS_ICON[f.status]} **${f.area}**: ${f.message}`)
+    .join('\n')
+
+  return [
+    `**Investigation complete** · Confidence: ${CONFIDENCE_LABEL[report.confidence] ?? report.confidence}`,
+    '',
+    report.summary,
+    topFindings ? `\n${topFindings}` : '',
+    report.hypothesis ? `\n**Hypothesis:** ${report.hypothesis}` : '',
+  ].filter(Boolean).join('\n')
+}
 
 export interface Finding {
   area: string
   status: 'pass' | 'warning' | 'fail' | 'unknown'
   message: string
+}
+
+export interface KBCitation {
+  id: string
+  title: string
+  source_ref: string | null
+  source_type: string
+  snippet: string
 }
 
 export interface InvestigationReport {
@@ -13,19 +41,29 @@ export interface InvestigationReport {
   hypothesis: string
   confidence: 'low' | 'medium' | 'high'
   recommended_steps: string[]
+  issueType: string
+  issueSeverity: 'none' | 'confirmed-bug'
+  suggestedIssueTitle: string
+  suggestedIssueBody: string
+  citations: KBCitation[]
 }
 
 interface InvestigatorState {
   reports: Record<number, InvestigationReport>
+  investigationIds: Record<number, string>
   loading: Record<number, boolean>
+  challenging: Record<number, boolean>
   errors: Record<number, string>
   investigate: (ticketId: number) => Promise<void>
+  challenge: (ticketId: number, text: string) => Promise<void>
   clear: (ticketId: number) => void
 }
 
-export const useInvestigatorStore = create<InvestigatorState>((set) => ({
+export const useInvestigatorStore = create<InvestigatorState>((set, get) => ({
   reports: {},
+  investigationIds: {},
   loading: {},
+  challenging: {},
   errors: {},
 
   async investigate(ticketId) {
@@ -34,11 +72,19 @@ export const useInvestigatorStore = create<InvestigatorState>((set) => ({
       errors: { ...s.errors, [ticketId]: '' },
     }))
     try {
-      const report = await requestInvestigation(ticketId)
+      const { report, investigationId } = await requestInvestigation(ticketId)
       set((s) => ({
         reports: { ...s.reports, [ticketId]: report },
+        investigationIds: { ...s.investigationIds, [ticketId]: investigationId },
         loading: { ...s.loading, [ticketId]: false },
       }))
+      useAIMessagesStore.getState().addMessage({
+        id: `inv-${investigationId}`,
+        ticketId,
+        text: buildSummaryText(report),
+        received: new Date().toISOString(),
+        type: 'summary',
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Investigation failed'
       set((s) => ({
@@ -48,13 +94,37 @@ export const useInvestigatorStore = create<InvestigatorState>((set) => ({
     }
   },
 
+  async challenge(ticketId, text) {
+    const original = get().reports[ticketId]
+    if (!original) return
+    set((s) => ({ challenging: { ...s.challenging, [ticketId]: true } }))
+    try {
+      const { report } = await challengeInvestigation(ticketId, original, text)
+      set((s) => ({
+        reports: { ...s.reports, [ticketId]: report },
+        challenging: { ...s.challenging, [ticketId]: false },
+      }))
+      useAIMessagesStore.getState().addMessage({
+        id: `challenge-${ticketId}-${Date.now()}`,
+        ticketId,
+        text: `**Re-assessment after challenge**\n\n${buildSummaryText(report)}`,
+        received: new Date().toISOString(),
+        type: 'challenge',
+      })
+    } catch {
+      set((s) => ({ challenging: { ...s.challenging, [ticketId]: false } }))
+    }
+  },
+
   clear(ticketId) {
     set((s) => {
       const reports = { ...s.reports }
       const errors = { ...s.errors }
+      const investigationIds = { ...s.investigationIds }
       delete reports[ticketId]
       delete errors[ticketId]
-      return { reports, errors }
+      delete investigationIds[ticketId]
+      return { reports, errors, investigationIds }
     })
   },
 }))

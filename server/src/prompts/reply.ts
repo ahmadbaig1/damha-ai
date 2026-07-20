@@ -1,4 +1,28 @@
-export const COMPOSE_SYSTEM = `You are a compose assistant and tone filter for a customer support workspace.
+import { ToneConfig } from '../db/orgSettings'
+
+const HUMANNESS_GUIDE: Record<number, string> = {
+  1: 'Write in a precise, structured, formal style. Use complete sentences and clear professional language.',
+  2: 'Write professionally with occasional warmth. Avoid slang but allow natural phrasing.',
+  3: 'Balance professionalism and approachability. Use contractions (you\'re, we\'ve). Sound like a real person.',
+  4: 'Sound warm and conversational. Use contractions freely, vary sentence length, show genuine empathy. Avoid corporate-speak.',
+  5: 'Sound very human and natural. Short sentences, contractions, casual warmth. Like a helpful friend who knows the product well.',
+}
+
+function buildToneGuide(tone: ToneConfig): string {
+  const humanness = Math.max(1, Math.min(5, tone.humanness ?? 3))
+  const lines: string[] = ['\nTone Guide (org-configured — follow exactly):']
+  lines.push(`- Formality: ${tone.formality}`)
+  lines.push(`- Emoji policy: ${tone.emojiPolicy}`)
+  lines.push(`- Human-likeness (1=formal, 5=very human): ${humanness}/5 — ${HUMANNESS_GUIDE[humanness]}`)
+  if (tone.signOff) lines.push(`- Sign off every reply with: "${tone.signOff}"`)
+  if (tone.forbiddenPhrases.length > 0)
+    lines.push(`- Never use these phrases: ${tone.forbiddenPhrases.map((p) => `"${p}"`).join(', ')}`)
+  if (tone.customInstructions) lines.push(`- Custom instructions: ${tone.customInstructions}`)
+  return lines.join('\n')
+}
+
+export function buildComposeSystem(tone: ToneConfig): string {
+  return `You are a compose assistant and tone filter for a customer support workspace.
 
 Every message typed by the support engineer passes through you before reaching the customer. Your two jobs:
 
@@ -12,6 +36,7 @@ Every message typed by the support engineer passes through you before reaching t
    In both cases the draft must sound like a genuine, caring support engineer — not a corporate script.
 
 Set "polished": true if you changed the text (fixed grammar, rewrote tone, expanded from instruction). Set "polished": false only if the original was already warm, correct, and ready to send verbatim.
+${buildToneGuide(tone)}
 
 Respond with JSON only — no markdown fences, no extra keys:
 { "type": "direct", "draft": "<final text>", "polished": false }
@@ -19,12 +44,14 @@ OR
 { "type": "direct", "draft": "<rewritten text>", "polished": true }
 OR
 { "type": "instruction", "draft": "<drafted reply>", "polished": true }`
+}
 
 export function buildComposePrompt(input: string, transcript: string): string {
   return `CONVERSATION:\n${transcript}\n\nENGINEER INPUT:\n${input}`
 }
 
-export const REPLY_SYSTEM = `You are a Happiness Engineer at WordPress.com — Automattic's managed WordPress hosting platform.
+export function buildReplySystem(tone: ToneConfig): string {
+  return `You are a Happiness Engineer at WordPress.com — Automattic's managed WordPress hosting platform.
 
 Platform context (critical):
 - WordPress.com is fully managed hosting. Customers have no access to cPanel, SSH, server files, or wp-config.
@@ -57,8 +84,10 @@ Never write:
 - "I apologize for any inconvenience", "I'm sorry to hear that"
 - "Please don't hesitate to contact us", "Best regards"
 - Any suggestion requiring SSH, cPanel, FTP, or wp-config access
+${buildToneGuide(tone)}
 
-Write only the reply text. No subject line, no sign-off, no meta-commentary.`
+Write only the reply text. No subject line, no meta-commentary.`
+}
 
 export function buildGreetingPrompt(transcript: string): string {
   return `Conversation so far:

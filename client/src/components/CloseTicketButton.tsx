@@ -1,24 +1,34 @@
 import { useState, useRef, useEffect } from 'react'
-import { closeTicket } from '../api/tickets'
+import { updateTicket } from '../api/tickets'
 import { useTicketStore } from '../store/ticketStore'
+
+type Status = 'open' | 'pending' | 'hold' | 'solved'
 
 interface Props {
   ticketId: number
 }
 
-const OPTIONS = [
-  { status: 'pending' as const, label: 'Close as Pending', description: 'Awaiting customer response' },
-  { status: 'solved' as const, label: 'Close as Solved', description: 'Issue resolved' },
+const OPTIONS: { status: Status; label: string; description: string; color: string }[] = [
+  { status: 'open',    label: 'Submit as Open',     description: 'Keep ticket open',               color: 'var(--color-accent)' },
+  { status: 'pending', label: 'Submit as Pending',   description: 'Awaiting customer response',     color: 'var(--color-warning)' },
+  { status: 'hold',    label: 'Submit as On-hold',   description: 'Waiting on a third party',       color: '#a78bfa' },
+  { status: 'solved',  label: 'Submit as Solved',    description: 'Issue resolved',                 color: 'var(--color-success)' },
 ]
+
+const STATUS_LABEL: Record<Status, string> = {
+  open: '● Open',
+  pending: '⏸ Pending',
+  hold: '⏳ On-hold',
+  solved: '✓ Solved',
+}
 
 export function CloseTicketButton({ ticketId }: Props) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [done, setDone] = useState<'pending' | 'solved' | null>(null)
+  const [done, setDone] = useState<Status | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const { loadTickets } = useTicketStore()
 
-  // Close dropdown on outside click
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
@@ -27,13 +37,13 @@ export function CloseTicketButton({ ticketId }: Props) {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
-  async function handleSelect(status: 'pending' | 'solved') {
+  async function handleSelect(status: Status) {
     setOpen(false)
     setLoading(true)
     try {
-      await closeTicket(ticketId, status)
+      await updateTicket(ticketId, { status })
       setDone(status)
-      loadTickets() // refresh sidebar
+      loadTickets()
     } catch {
       // silent — ticket may already be in that state
     } finally {
@@ -42,14 +52,15 @@ export function CloseTicketButton({ ticketId }: Props) {
   }
 
   if (done) {
+    const opt = OPTIONS.find((o) => o.status === done)!
     return (
       <span style={{
         fontSize: 'var(--text-xs)',
         fontFamily: 'var(--font-mono)',
-        color: done === 'solved' ? 'var(--color-success)' : 'var(--color-warning)',
+        color: opt.color,
         fontWeight: 600,
       }}>
-        {done === 'solved' ? '✓ Solved' : '⏸ Pending'}
+        {STATUS_LABEL[done]}
       </span>
     )
   }
@@ -63,7 +74,7 @@ export function CloseTicketButton({ ticketId }: Props) {
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          background: open ? 'rgba(0,0,0,0.05)' : 'transparent',
+          background: open ? 'rgba(255,255,255,0.08)' : 'transparent',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)',
           color: loading ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
@@ -73,10 +84,10 @@ export function CloseTicketButton({ ticketId }: Props) {
           cursor: loading ? 'wait' : 'pointer',
           transition: 'background 0.15s, border-color 0.15s',
         }}
-        onMouseEnter={(e) => { if (!open) e.currentTarget.style.borderColor = 'rgba(0,0,0,0.2)' }}
+        onMouseEnter={(e) => { if (!open) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)' }}
         onMouseLeave={(e) => { if (!open) e.currentTarget.style.borderColor = 'var(--color-border)' }}
       >
-        {loading ? 'Closing…' : 'Close'}
+        {loading ? 'Submitting…' : 'Submit'}
         <svg
           width="10"
           height="10"
@@ -94,14 +105,14 @@ export function CloseTicketButton({ ticketId }: Props) {
           top: 'calc(100% + 6px)',
           right: 0,
           zIndex: 100,
-          background: 'var(--glass-bg-heavy)',
-          backdropFilter: 'var(--glass-blur)',
-          WebkitBackdropFilter: 'var(--glass-blur)',
-          border: '1px solid var(--glass-border)',
+          background: 'rgba(12,12,28,0.92)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255,255,255,0.15)',
           borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-md)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
           overflow: 'hidden',
-          minWidth: 180,
+          minWidth: 210,
         }}>
           {OPTIONS.map((opt, i) => (
             <button
@@ -112,7 +123,7 @@ export function CloseTicketButton({ ticketId }: Props) {
                 textAlign: 'left',
                 background: 'transparent',
                 border: 'none',
-                borderTop: i > 0 ? '1px solid var(--glass-border)' : 'none',
+                borderTop: i > 0 ? '1px solid rgba(255,255,255,0.07)' : 'none',
                 padding: '10px 14px',
                 cursor: 'pointer',
                 display: 'flex',
@@ -120,10 +131,10 @@ export function CloseTicketButton({ ticketId }: Props) {
                 gap: 2,
                 transition: 'background 0.1s',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.03)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
             >
-              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-text-primary)' }}>
+              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: opt.color }}>
                 {opt.label}
               </span>
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>

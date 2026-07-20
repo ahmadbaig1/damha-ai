@@ -32,7 +32,7 @@ export default function Login() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'var(--color-bg)',
+      background: 'transparent',
       fontFamily: 'var(--font-sans)',
     }}>
       <div style={{
@@ -40,10 +40,10 @@ export default function Login() {
         background: 'var(--glass-bg-heavy)',
         backdropFilter: 'var(--glass-blur)',
         WebkitBackdropFilter: 'var(--glass-blur)',
-        border: '1px solid var(--glass-border)',
+        border: '1px solid rgba(255, 255, 255, 0.14)',
         borderRadius: 'var(--radius-xl)',
         padding: 'var(--space-8)',
-        boxShadow: 'var(--shadow-lg), var(--glass-highlight)',
+        boxShadow: '0 8px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(129,140,248,0.1), var(--glass-highlight)',
       }}>
         <div style={{ marginBottom: 'var(--space-6)' }}>
           <h1 style={{

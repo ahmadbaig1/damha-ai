@@ -3,6 +3,7 @@ import { sendReply, getDraftReply, composeMessage } from '../api/tickets'
 import { useTicketStore } from '../store/ticketStore'
 import { useCoachStore } from '../store/coachStore'
 import { useInvestigatorStore } from '../store/investigatorStore'
+import { useVoiceDictation } from '../hooks/useVoiceDictation'
 
 interface Props {
   ticketId: number
@@ -22,6 +23,11 @@ export function ReplyComposer({ ticketId, conversationId }: Props) {
   const fetchSuggestion = useCoachStore((s) => s.fetchSuggestion)
   const { reports: investigationReports } = useInvestigatorStore()
   const investigationReport = investigationReports[ticketId]
+
+  const { listening, supported: voiceSupported, toggle: toggleVoice } = useVoiceDictation((transcript) => {
+    setText(transcript)
+    runCompose(transcript)
+  })
 
   // Consume auto-generated greeting draft when composer is empty
   useEffect(() => {
@@ -46,6 +52,21 @@ export function ReplyComposer({ ticketId, conversationId }: Props) {
       await refreshMessages(ticketId)
       fetchSuggestion(ticketId)
     } finally {
+      setState('idle')
+    }
+  }
+
+  async function runCompose(input: string) {
+    const trimmed = input.trim()
+    if (!trimmed || state !== 'idle') return
+    setState('analyzing')
+    try {
+      const result = await composeMessage(ticketId, trimmed)
+      setText(result.draft)
+      setDraftSource(result.type === 'instruction' ? 'instruction' : result.polished ? 'polished' : null)
+      setState('idle')
+      setTimeout(() => textareaRef.current?.focus(), 50)
+    } catch {
       setState('idle')
     }
   }
@@ -188,7 +209,7 @@ export function ReplyComposer({ ticketId, conversationId }: Props) {
             position: 'absolute',
             inset: 0,
             borderRadius: 'var(--radius-lg)',
-            background: 'rgba(255,255,255,0.6)',
+            background: 'rgba(8,8,24,0.75)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
@@ -217,6 +238,26 @@ export function ReplyComposer({ ticketId, conversationId }: Props) {
               ? 'Review the draft above, edit if needed, then send.'
               : '⌘↵ send · rude or broken messages are auto-polished'}
         </span>
+
+        {voiceSupported && (
+          <button
+            onClick={toggleVoice}
+            title={listening ? 'Stop recording (⌘⇧M)' : 'Start voice dictation (⌘⇧M)'}
+            style={{
+              background: listening ? 'rgba(239,68,68,0.15)' : 'transparent',
+              border: `1px solid ${listening ? 'rgba(239,68,68,0.5)' : 'var(--color-border)'}`,
+              borderRadius: 'var(--radius-md)',
+              color: listening ? 'var(--color-danger)' : 'var(--color-text-secondary)',
+              padding: '7px 10px',
+              cursor: 'pointer',
+              fontSize: 'var(--text-sm)',
+              transition: 'all 0.15s',
+              animation: listening ? 'pulse 1.2s ease-in-out infinite' : 'none',
+            }}
+          >
+            🎙
+          </button>
+        )}
 
         <button
           onClick={handleDraft}

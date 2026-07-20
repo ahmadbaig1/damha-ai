@@ -9,25 +9,18 @@ export interface ChatTicket {
   updated_at: string
 }
 
-export interface SmoochMessage {
+export interface ConversationMessage {
   id: string
+  role: 'customer' | 'agent'
+  text: string
   received: string
-  author: {
-    type: 'user' | 'business'
-    displayName?: string
-  }
-  content: {
-    type: 'text' | 'form' | 'formResponse'
-    text?: string
-    textFallback?: string
-  }
-  source: { type: string }
+  authorName?: string
 }
 
 export interface ConversationData {
   ticket: ChatTicket
   conversationId: string
-  messages: SmoochMessage[]
+  messages: ConversationMessage[]
 }
 
 export async function fetchLiveChats(): Promise<ChatTicket[]> {
@@ -61,11 +54,24 @@ export async function sendReply(
   await api.post(`/tickets/${ticketId}/reply`, { conversationId, text })
 }
 
+export interface TicketUpdate {
+  status?: 'new' | 'open' | 'pending' | 'hold' | 'solved' | 'closed'
+  subject?: string
+  requester_id?: number
+}
+
 export async function closeTicket(
   ticketId: number,
   status: 'pending' | 'solved',
 ): Promise<void> {
-  await api.patch(`/tickets/${ticketId}/status`, { status })
+  await api.patch(`/tickets/${ticketId}`, { status })
+}
+
+export async function updateTicket(
+  ticketId: number,
+  fields: TicketUpdate,
+): Promise<void> {
+  await api.patch(`/tickets/${ticketId}`, fields)
 }
 
 export type ComposeResult =
