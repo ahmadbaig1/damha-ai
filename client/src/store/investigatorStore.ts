@@ -35,6 +35,28 @@ export interface KBCitation {
   snippet: string
 }
 
+export interface CritiqueFinding {
+  claim: string
+  verdict: 'well-grounded' | 'overstated' | 'unsupported' | 'contradicted'
+  reasoning: string
+}
+
+export interface CritiqueReport {
+  overallAssessment: string
+  critiques: CritiqueFinding[]
+  alternativeHypothesis: string | null
+  confidenceChallenge: 'maintain' | 'lower' | 'raise'
+}
+
+export interface ArbiterVerdict {
+  reasoning: string
+  addressedCritiques: Array<{
+    claim: string
+    resolution: 'upheld' | 'overruled' | 'partially-accepted'
+    explanation: string
+  }>
+}
+
 export interface InvestigationReport {
   summary: string
   findings: Finding[]
@@ -46,6 +68,8 @@ export interface InvestigationReport {
   suggestedIssueTitle: string
   suggestedIssueBody: string
   citations: KBCitation[]
+  critique?: CritiqueReport
+  arbiterVerdict?: ArbiterVerdict
 }
 
 interface InvestigatorState {

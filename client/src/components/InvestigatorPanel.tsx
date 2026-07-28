@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useInvestigatorStore, Finding } from '../store/investigatorStore'
+import { useInvestigatorStore, Finding, CritiqueFinding } from '../store/investigatorStore'
 import { KBSuggestModal } from './KBSuggestModal'
 import { RaiseIssueModal } from './RaiseIssueModal'
 
@@ -30,6 +30,26 @@ const SOURCE_COLOR: Record<string, string> = {
   email: '#a78bfa',
 }
 
+const CRITIQUE_VERDICT_COLOR: Record<CritiqueFinding['verdict'], string> = {
+  'well-grounded': 'var(--color-success)',
+  'overstated': 'var(--color-warning)',
+  'unsupported': '#f97316',
+  'contradicted': 'var(--color-danger)',
+}
+
+const CRITIQUE_VERDICT_SYMBOL: Record<CritiqueFinding['verdict'], string> = {
+  'well-grounded': '✓',
+  'overstated': '~',
+  'unsupported': '?',
+  'contradicted': '✗',
+}
+
+const RESOLUTION_COLOR: Record<string, string> = {
+  upheld: 'var(--color-success)',
+  overruled: 'var(--color-danger)',
+  'partially-accepted': 'var(--color-warning)',
+}
+
 interface Props {
   ticketId: number
 }
@@ -40,6 +60,7 @@ export function InvestigatorPanel({ ticketId }: Props) {
   const [showRaiseModal, setShowRaiseModal] = useState(false)
   const [challengeText, setChallengeText] = useState('')
   const [showChallenge, setShowChallenge] = useState(false)
+  const [showDebate, setShowDebate] = useState(false)
 
   const isLoading = loading[ticketId]
   const isChallenging = challenging[ticketId]
@@ -82,7 +103,7 @@ export function InvestigatorPanel({ ticketId }: Props) {
 
         {isLoading && (
           <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
-            checking site · fetching plugins…
+            investigating · critiquing · arbitrating…
           </p>
         )}
 
@@ -171,6 +192,82 @@ export function InvestigatorPanel({ ticketId }: Props) {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Agent Debate */}
+            {(report.critique || report.arbiterVerdict) && (
+              <div>
+                <button
+                  onClick={() => setShowDebate((v) => !v)}
+                  style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '5px', cursor: 'pointer', textAlign: 'center', width: '100%' }}
+                >
+                  {showDebate ? '▲' : '▼'} Agent Debate
+                </button>
+
+                {showDebate && (
+                  <div style={{ marginTop: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+
+                    {/* Critic section */}
+                    {report.critique && (
+                      <div style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.18)', borderRadius: 'var(--radius-md)', padding: 'var(--space-2)' }}>
+                        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: '#f97316', fontFamily: 'var(--font-mono)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Critic
+                        </div>
+                        <p style={{ margin: '0 0 8px', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                          {report.critique.overallAssessment}
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          {report.critique.critiques.map((c, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                              <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: CRITIQUE_VERDICT_COLOR[c.verdict], fontFamily: 'var(--font-mono)', flexShrink: 0, width: 10, textAlign: 'center', paddingTop: 1 }}>
+                                {CRITIQUE_VERDICT_SYMBOL[c.verdict]}
+                              </span>
+                              <div style={{ minWidth: 0 }}>
+                                <span style={{ fontSize: 'var(--text-xs)', fontStyle: 'italic', color: 'var(--color-text-primary)' }}>"{c.claim}"</span>
+                                <span style={{ fontSize: 10, color: 'var(--color-text-secondary)', display: 'block', marginTop: 1, lineHeight: 1.4 }}>{c.reasoning}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {report.critique.alternativeHypothesis && (
+                          <div style={{ marginTop: 8, padding: '6px 8px', background: 'rgba(249,115,22,0.08)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)', color: '#f97316', lineHeight: 1.5 }}>
+                            <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)' }}>Alt: </span>
+                            {report.critique.alternativeHypothesis}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Arbiter section */}
+                    {report.arbiterVerdict && (
+                      <div style={{ background: 'rgba(129,140,248,0.06)', border: '1px solid rgba(129,140,248,0.18)', borderRadius: 'var(--radius-md)', padding: 'var(--space-2)' }}>
+                        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-accent)', fontFamily: 'var(--font-mono)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Arbiter
+                        </div>
+                        <p style={{ margin: '0 0 8px', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                          {report.arbiterVerdict.reasoning}
+                        </p>
+                        {report.arbiterVerdict.addressedCritiques.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            {report.arbiterVerdict.addressedCritiques.map((a, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                                <span style={{ fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-mono)', color: RESOLUTION_COLOR[a.resolution] ?? 'var(--color-text-secondary)', background: `${RESOLUTION_COLOR[a.resolution] ?? 'rgba(255,255,255,0.1)'}22`, border: `1px solid ${RESOLUTION_COLOR[a.resolution] ?? 'rgba(255,255,255,0.1)'}44`, borderRadius: 100, padding: '1px 6px', flexShrink: 0, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                                  {a.resolution}
+                                </span>
+                                <div style={{ minWidth: 0 }}>
+                                  <span style={{ fontSize: 'var(--text-xs)', fontStyle: 'italic', color: 'var(--color-text-primary)' }}>"{a.claim}"</span>
+                                  <span style={{ fontSize: 10, color: 'var(--color-text-secondary)', display: 'block', marginTop: 1, lineHeight: 1.4 }}>{a.explanation}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                  </div>
+                )}
               </div>
             )}
 
